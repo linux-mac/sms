@@ -29,7 +29,7 @@ type AliManager struct {
 	AppSecret string `sm:"#.ali.appSecret"`
 }
 
-func (m *AliManager) Handler(signName, templateCode string) *Client {
+func (m *AliManager) Handler(signName, templateCode string) Client {
 	return NewAliSMSClient(signName, templateCode, m.AppKey, m.AppSecret)
 }
 
