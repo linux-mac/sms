@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"github.com/cocotyty/summer"
 	"github.com/satori/go.uuid"
 	"io"
 	"io/ioutil"
@@ -15,13 +16,30 @@ import (
 	"time"
 )
 
+func init() {
+	summer.Put(&AliManager{})
+}
+
+func NewManager(appKey, appSecret string) (manager *AliManager) {
+	return &AliManager{AppKey: appKey, AppSecret: appSecret}
+}
+
+type AliManager struct {
+	AppKey    string `sm:"#.ali.appKey"`
+	AppSecret string `sm:"#.ali.appSecret"`
+}
+
+func (m *AliManager) Handler(signName, templateCode string) *Client {
+	return NewAliSMSClient(signName, templateCode, m.AppKey, m.AppSecret)
+}
+
 const (
 	URL     string = "https://dm.aliyuncs.com/"
 	Action  string = "SingleSendSms"
 	Version string = "2015-11-23"
 )
 
-type AliSMSClient struct {
+type AliClient struct {
 	client       *http.Client
 	SignName     string
 	TemplateCode string
@@ -29,8 +47,8 @@ type AliSMSClient struct {
 	AppSecret    string
 }
 
-func NewAliSMSClient(signName, templateCode, appKey, appSecret string) (client *AliSMSClient) {
-	return &AliSMSClient{
+func NewAliSMSClient(signName, templateCode, appKey, appSecret string) (client *AliClient) {
+	return &AliClient{
 		client:       &http.Client{},
 		SignName:     signName,
 		TemplateCode: templateCode,
@@ -65,7 +83,7 @@ var CodeToErrCode = map[string]int64{
 	"":                                     0,
 }
 
-func (client *AliSMSClient) Send(telephone string, msg map[string]string) (result *SMSResult, err error) {
+func (client *AliClient) Send(telephone string, msg map[string]string) (result *Result, err error) {
 
 	params := make(map[string]string)
 	params["Format"] = "json"
@@ -95,11 +113,11 @@ func (client *AliSMSClient) Send(telephone string, msg map[string]string) (resul
 	if err = json.Unmarshal(body, aliResult); err != nil {
 		return nil, err
 	}
-	return &SMSResult{ErrCode: CodeToErrCode[aliResult.Code], Msg: CodeMsg[aliResult.Code]}, nil
+	return &Result{ErrCode: CodeToErrCode[aliResult.Code], Msg: CodeMsg[aliResult.Code]}, nil
 
 }
 
-func (client *AliSMSClient) doPost(m map[string]string) (result []byte, err error) {
+func (client *AliClient) doPost(m map[string]string) (result []byte, err error) {
 	body, size := client.getRequestBody(m)
 	req, _ := http.NewRequest("POST", URL, body)
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
@@ -114,7 +132,7 @@ func (client *AliSMSClient) doPost(m map[string]string) (result []byte, err erro
 	return ioutil.ReadAll(resp.Body)
 }
 
-func (client *AliSMSClient) getRequestBody(m map[string]string) (reader io.Reader, size int64) {
+func (client *AliClient) getRequestBody(m map[string]string) (reader io.Reader, size int64) {
 	v := url.Values{}
 	for k := range m {
 		v.Set(k, m[k])
@@ -125,13 +143,4 @@ func (client *AliSMSClient) getRequestBody(m map[string]string) (reader io.Reade
 	sum := mac.Sum(nil)
 	v.Set("Signature", base64.StdEncoding.EncodeToString(sum))
 	return strings.NewReader(v.Encode()), int64(len(v.Encode()))
-}
-
-type SMSClient interface {
-	Send(telephone string, msg map[string]string) (result *SMSResult, err error)
-}
-
-type SMSResult struct {
-	ErrCode int64  `json:"errcode"`
-	Msg     string `json:"msg"`
 }
